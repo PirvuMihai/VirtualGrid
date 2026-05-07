@@ -1,3 +1,4 @@
+pr = console.log
 class VirtualGrid extends HTMLElement {
 	constructor() {
 		super()
@@ -10,28 +11,37 @@ class VirtualGrid extends HTMLElement {
 			<canvas id="grid" tabindex=0 width=600 height=600 style="border: 1px solid black">
 			</canvas>
 		`
-		this.canvas            = this.querySelector('#grid')
-		this.ctx               = this.canvas.getContext('2d')
-		this.canvas_width      = this.canvas.width
-		this.canvas_height     = this.canvas.height
-		this.scroll_width      = 2 * this.canvas.width / 100
-		this.row_height        = this.canvas_height / 20
-		this.scroll_position   = 0
-		this.scroll_height     = 0
-		this.total_grid_height = 0
-		this.scroll_delta      = 5 * this.canvas.height / 100
+		this.canvas             = this.querySelector('#grid')
+		this.ctx                = this.canvas.getContext('2d')
+		this.canvas_width       = this.canvas.width
+		this.canvas_height      = this.canvas.height
+		this.scroll_width       = 2 * this.canvas.width / 100
+		this.row_height         = this.canvas_height / 20
+		this.scroll_position    = 0
+		this.scroll_height      = 0
+		this.total_grid_height  = 0
+		this.mouse_scroll_delta = 100
+		this.is_scroll_dragged  = false
 	
 		this.handleScroll = this.handleScroll.bind(this)
 		this.keyDown      = this.keyDown.bind(this)
+		this.mouseDown    = this.mouseDown.bind(this)
+		this.mouseUp      = this.mouseUp.bind(this)
+		this.mouseDrag    = this.mouseDrag.bind(this)
 
 		this.canvas.addEventListener('wheel', this.handleScroll)
 		this.canvas.addEventListener('keydown', this.keyDown)
+		this.canvas.addEventListener('mousedown', this.mouseDown)
+		this.canvas.addEventListener('mouseup', this.mouseUp)
+		this.canvas.addEventListener('mousemove', this.mouseDrag)
 	}
 
 	disconnectedCallback() {
-		this.canvas.removeEventListener('click', this.handleClick)
 		this.canvas.removeEventListener('wheel', this.handleScroll)
 		this.canvas.removeEventListener('keydown', this.keyDown)
+		this.canvas.removeEventListener('mousedown', this.mouseDown)
+		this.canvas.removeEventListener('mouseup', this.mouseUp)
+		this.canvas.removeEventListener('mousemove', this.mouseDrag)
 	}
 
 	draw_scroll() {
@@ -51,8 +61,7 @@ class VirtualGrid extends HTMLElement {
 	}
 
 	draw_grid() {
-		// if filterable, add an empty row, when clicked, spawn input to filter
-		// --- compute scroll → content mapping ---
+		// --- compute scroll -> content mapping ---
 		let maxScroll = this.canvas_height - this.scroll_height
 		let maxOffset = this.total_grid_height - this.canvas_height
 
@@ -121,13 +130,13 @@ class VirtualGrid extends HTMLElement {
 		this.data = params
 		this.data_length = Object.keys(params).length
 		this.total_grid_height = this.row_height * this.data_length
-		this.redraw()
+		requestAnimationFrame(() => this.redraw())
 	}
 
 	// Event listeners
 
 	handleScroll(e) {
-		this.scroll_delta = Math.abs(e.deltaY) * this.canvas_height / this.total_grid_height
+		this.scroll_delta = this.mouse_scroll_delta * this.canvas_height / this.total_grid_height
 		if (e.deltaY > 0) {
 			// scroll down
 			this.scroll_position += this.scroll_delta
@@ -139,20 +148,56 @@ class VirtualGrid extends HTMLElement {
 			if (this.scroll_position <= 0)
 				this.scroll_position = 0
 		}
-		this.redraw()
+		requestAnimationFrame(() => this.redraw())
 	}
 
 	keyDown(e) {
+		let scroll_delta = 2 * this.mouse_scroll_delta * this.canvas_height / this.total_grid_height
 		if (e.key == 'PageDown') {
-			this.scroll_position += this.canvas_height * this.canvas_height * 0.45 / this.total_grid_height
-			if (this.scroll_position >= this.canvas_height - this.scroll_delta - this.scroll_height)
+			this.scroll_position += scroll_delta
+			if (this.scroll_position >= this.canvas_height - scroll_delta - this.scroll_height)
 				this.scroll_position = this.canvas_height - this.scroll_height
 		} else if (e.key == 'PageUp') {
-			this.scroll_position -= this.canvas_height * this.canvas_height * 0.45 / this.total_grid_height
+			this.scroll_position -= scroll_delta
 			if (this.scroll_position <= 0)
 				this.scroll_position = 0
 		}
-		this.redraw()
+		requestAnimationFrame(() => this.redraw())
+	}
+
+	mouseDown(e) {
+		let x = e.offsetX
+		let y = e.offsetY
+		// scroll stuff
+		if (x >= this.canvas_width && x <= this.canvas.width) {
+			if (y >= this.scroll_position && y <= this.scroll_position + this.scroll_height) {
+				// scroll drag
+				this.is_scroll_dragged = true
+			} else {
+				// click on track
+				this.scroll_position = y - this.scroll_height / 2
+			}
+		} else {
+			// click on a cell
+		}
+		requestAnimationFrame(() => this.redraw())
+	}
+
+	mouseUp(e) {
+		this.is_scroll_dragged = false
+	}
+	
+	mouseDrag(e) {
+		let x = e.offsetX
+		let y = e.offsetY
+		if (this.is_scroll_dragged) {
+			this.scroll_position = y - this.scroll_height / 2
+			if (this.scroll_position >= this.canvas_height - this.scroll_height)
+				this.scroll_position = this.canvas_height - this.scroll_height
+			if (this.scroll_position <= 0)
+				this.scroll_position = 0
+		requestAnimationFrame(() => this.redraw())
+		}
 	}
 
 	// Utils
